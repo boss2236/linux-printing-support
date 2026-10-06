@@ -41,7 +41,7 @@ def main() -> None:
     ap.add_argument("--no-window", action="store_true", help="just print the URL; don't open a window")
     args = ap.parse_args()
 
-    from .server import serve  # deferred so --help is instant
+    from .server import WORK, serve  # deferred so --help is instant
 
     httpd, url = serve(args.port, args.files)
     threading.Thread(target=httpd.serve_forever, daemon=True).start()
@@ -61,4 +61,5 @@ def main() -> None:
         except KeyboardInterrupt:
             window.terminate()
     httpd.shutdown()
+    shutil.rmtree(WORK, ignore_errors=True)  # temp copies of opened files + converted docs
     sys.exit(0)

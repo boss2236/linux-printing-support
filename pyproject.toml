@@ -3,6 +3,7 @@ name = "linux-printing-support"
 version = "1.0.0"
 description = "A friendly print dialog for Linux: live preview, two-sided, layout and margins, for any driverless printer."
 readme = "README.md"
+license = "MIT"
 authors = [
     { name = "boss2236", email = "muntasirmahmud776@gmail.com" }
 ]

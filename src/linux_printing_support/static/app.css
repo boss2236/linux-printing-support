@@ -350,6 +350,17 @@ details.more .more-body { padding-top: 12px; }
 .job-icon { width: 34px; height: 34px; border-radius: 9px; display: grid; place-items: center; background: var(--accent-soft); color: var(--accent); flex: none; }
 .job.done .job-icon { background: var(--panel-2); color: var(--ok); }
 .muted-title { font-size: 11px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--text-3); margin: 18px 0 10px; }
+.job.failed .job-icon { color: var(--bad); }
+.job { transition: opacity .18s, transform .18s; }
+.job.leaving { opacity: 0; transform: translateX(16px); }
+.job-remove { width: 30px; height: 30px; color: var(--text-3); opacity: 0; transition: opacity .15s; }
+.job:hover .job-remove, .job-remove:focus-visible { opacity: 1; }
+.job-remove:hover { color: var(--bad); }
+.history-head { display: flex; align-items: center; justify-content: space-between; margin-top: 18px; }
+.history-head .muted-title { margin: 10px 0; }
+.btn.danger { background: var(--bad); border-color: transparent; color: #fff; }
+.btn.danger:hover { background: var(--bad); filter: brightness(1.08); }
+.drawer-foot { display: flex; align-items: center; gap: 14px; justify-content: space-between; padding: 14px 18px; border-top: 1px solid var(--line); font-size: 13px; }
 .empty-note { color: var(--text-3); text-align: center; padding: 22px 0; }
 
 .toasts { position: fixed; left: 50%; top: 68px; transform: translateX(-50%); z-index: 80; display: flex; flex-direction: column; gap: 8px; align-items: center; }

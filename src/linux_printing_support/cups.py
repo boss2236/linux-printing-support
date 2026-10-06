@@ -6,6 +6,7 @@ works on any distro that ships CUPS, with no compiled bindings.
 
 from __future__ import annotations
 
+import getpass
 import re
 import shutil
 import socket
@@ -199,27 +200,59 @@ def printer_details(name: str, refresh: bool = False) -> Printer:
 
 # ---------------------------------------------------------------- jobs
 
-def list_jobs() -> list[dict]:
+JOB_STATE = {"3": "pending", "4": "held", "5": "printing", "6": "stopped", "7": "cancelled", "8": "aborted",
+             "9": "completed"}
+
+
+def get_jobs(which: str = "not-completed") -> list[dict]:
+    """This user's jobs via IPP Get-Jobs, newest first. which: not-completed | completed."""
+    test = (
+        "{\n OPERATION Get-Jobs\n GROUP operation-attributes-tag\n"
+        " ATTR charset attributes-charset utf-8\n ATTR naturalLanguage attributes-natural-language en\n"
+        " ATTR uri printer-uri $uri\n"
+        f" ATTR name requesting-user-name {getpass.getuser()}\n"
+        f" ATTR keyword which-jobs {which}\n ATTR boolean my-jobs true\n"
+        " ATTR keyword requested-attributes job-id,job-name,job-state,job-printer-uri,time-at-creation,"
+        "time-at-completed,job-impressions-completed,job-printer-state-message,job-state-reasons\n}\n"
+    )
+    try:
+        out = run(["ipptool", "-tv", "ipp://localhost/", "/dev/stdin"], 10, test.encode()).stdout.decode(errors="replace")
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        return []
+    out = out.split("RECEIVED", 1)[-1]
     jobs = []
-    for line in text(["lpstat", "-o", "-l"]).splitlines():
-        if m := re.match(r"^(\S+)-(\d+)\s+(\S+)\s+(\d+)\s+(.+)$", line):
-            jobs.append({"id": f"{m.group(1)}-{m.group(2)}", "printer": m.group(1), "user": m.group(3),
-                         "size": int(m.group(4)), "when": m.group(5).strip(), "status": ""})
-        elif jobs and (m := re.match(r"^\s+Status: (.*)$", line)):
-            jobs[-1]["status"] = m.group(1)
+    for block in out.split("-- separator --"):
+        a = dict(re.findall(r"^\s+([a-z-]+) \([^)]*\) = (.*)$", block, re.M))
+        if "job-id" not in a:
+            continue
+        jobs.append({
+            "id": a["job-id"],
+            "title": a.get("job-name", ""),
+            "printer": a.get("job-printer-uri", "").rsplit("/", 1)[-1],
+            "state": JOB_STATE.get(a.get("job-state", ""), a.get("job-state", "unknown")),
+            "created": int(a.get("time-at-creation", 0) or 0),
+            "completed": int(a.get("time-at-completed", 0) or 0),
+            "pages": int(a.get("job-impressions-completed", 0) or 0),
+            # Driverless queues log harmless filter chatter here; don't show it as a status.
+            "status": "" if "Unable to detect" in a.get("job-printer-state-message", "") else a.get("job-printer-state-message", ""),
+        })
+    jobs.sort(key=lambda j: int(j["id"]), reverse=True)
     return jobs
 
 
-def recent_jobs(limit: int = 8) -> list[dict]:
-    jobs = []
-    for line in text(["lpstat", "-W", "completed", "-o"]).splitlines():
-        if m := re.match(r"^(\S+)-(\d+)\s+(\S+)\s+(\d+)\s+(.+)$", line):
-            jobs.append({"id": f"{m.group(1)}-{m.group(2)}", "printer": m.group(1), "when": m.group(5).strip()})
-    return jobs[-limit:][::-1]
-
-
 def cancel_job(job_id: str) -> tuple[bool, str]:
-    r = run(["cancel", job_id])
+    r = run(["cancel", str(job_id)])
+    return r.returncode == 0, r.stderr.decode().strip()
+
+
+def remove_from_history(job_ids: list[str]) -> tuple[bool, str]:
+    """Purge finished jobs (and their spooled files) from CUPS' history.
+
+    `cancel -x` works without root for the user's own jobs.
+    """
+    if not job_ids:
+        return True, ""
+    r = run(["cancel", "-x", *map(str, job_ids)])
     return r.returncode == 0, r.stderr.decode().strip()
 
 
@@ -261,10 +294,16 @@ def discover() -> list[dict]:
     return found
 
 
+def _tool(name: str) -> str | None:
+    # Debian/Ubuntu keep admin tools like ipp-usb in sbin, which isn't on a normal user's PATH.
+    return shutil.which(name) or shutil.which(name, path="/usr/sbin:/sbin:/usr/local/sbin")
+
+
 def ipp_usb_status() -> dict:
-    if not shutil.which("ipp-usb"):
+    exe = _tool("ipp-usb")
+    if not exe:
         return {"installed": False, "running": False, "devices": []}
-    out = text(["ipp-usb", "status"], timeout=5)
+    out = text([exe, "status"], timeout=5)
     devices = []
     for m in re.finditer(r'\d+\.\s+(.+?)\s+([0-9a-f]{4}:[0-9a-f]{4})\s+(\S+)\s+"([^"]*)"\s*\n\s+status:\s*(.*)', out):
         devices.append({"model": m.group(4), "port": m.group(3), "status": m.group(5).strip()})

@@ -32,6 +32,9 @@ GRIDS = {1: [(1, 1)], 2: [(2, 1), (1, 2)], 4: [(2, 2)], 6: [(3, 2), (2, 3)], 9: 
 NUP_GAP_MM = 4
 
 
+CONVERT_DIR: Path | None = None  # where converted Office files go (the server's temp dir)
+
+
 class ConversionError(Exception):
     pass
 
@@ -58,7 +61,7 @@ def _office_to_pdf(path: Path) -> Path:
     soffice = shutil.which("soffice") or shutil.which("libreoffice")
     if not soffice:
         raise ConversionError("Printing documents like this needs LibreOffice installed.")
-    out = Path(tempfile.mkdtemp(prefix="lps-conv-"))
+    out = Path(tempfile.mkdtemp(prefix="conv-", dir=CONVERT_DIR))
     # A private profile avoids clashing with a LibreOffice window the user has open.
     profile = f"-env:UserInstallation=file://{out}/profile"
     r = subprocess.run([soffice, profile, "--headless", "--convert-to", "pdf", "--outdir", str(out), str(path)],

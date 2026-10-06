@@ -556,7 +556,7 @@ function flipDialog(ticket) {
   };
 }
 
-// ------------------------------------------------------------ queue
+// ------------------------------------------------------------ queue & history
 let lastActive = 0;
 async function pollJobs() {
   try {
@@ -570,30 +570,98 @@ async function pollJobs() {
   } catch { return null; }
 }
 
+function when(ts) {
+  if (!ts) return "";
+  const d = new Date(ts * 1000), now = new Date();
+  const time = d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  const days = Math.round((new Date(now.toDateString()) - new Date(d.toDateString())) / 864e5);
+  if (days === 0) return `Today ${time}`;
+  if (days === 1) return `Yesterday ${time}`;
+  return d.toLocaleDateString([], { day: "numeric", month: "short", year: d.getFullYear() === now.getFullYear() ? undefined : "numeric" }) + ` ${time}`;
+}
+
+// Two-step confirm on the button itself: first click arms it, second click runs.
+function armed(btn, label, run) {
+  btn.addEventListener("click", async () => {
+    if (!btn.dataset.armed) {
+      btn.dataset.armed = "1";
+      btn.dataset.label = btn.innerHTML;
+      btn.innerHTML = label;
+      btn.classList.add("danger");
+      setTimeout(() => { if (btn.isConnected && btn.dataset.armed) { delete btn.dataset.armed; btn.innerHTML = btn.dataset.label; btn.classList.remove("danger"); } }, 3500);
+      return;
+    }
+    btn.disabled = true;
+    try { await run(); } finally { btn.disabled = false; }
+  });
+}
+
 function renderQueue(active, recent) {
   const body = $("#overlay .drawer-body");
   if (!body) return;
-  const job = (j, done) => `
-    <div class="job ${done ? "done" : ""}">
-      <div class="job-icon">${icon(done ? "i-check" : "i-printer", 17)}</div>
-      <div class="grow"><div class="job-title">${esc(j.title || "Job " + j.id.split("-").pop())}</div>
-        <div class="job-sub">${esc(j.printer)} · ${esc(done ? j.when : (j.status || "Waiting"))}</div></div>
-      ${done ? "" : `<button class="btn sm" data-cancel="${esc(j.id)}">Cancel</button>`}
+  const live = (j) => `
+    <div class="job">
+      <div class="job-icon">${icon("i-printer", 17)}</div>
+      <div class="grow"><div class="job-title">${esc(j.title || "Untitled")}</div>
+        <div class="job-sub">${esc(j.printer)} · ${esc(j.state === "printing" ? (j.status || "Printing…") : j.state === "held" ? "On hold" : j.state === "stopped" ? "Stopped — printer needs attention" : "Waiting")}</div></div>
+      <button class="btn sm" data-cancel="${esc(j.id)}">Cancel</button>
     </div>`;
-  body.innerHTML = (active.length ? active.map((j) => job(j, false)).join("") : '<div class="empty-note">Nothing printing right now</div>')
-    + (recent.length ? `<div class="muted-title">Recently finished</div>${recent.map((j) => job(j, true)).join("")}` : "");
+  const done = (j) => {
+    const ok = j.state === "completed";
+    const what = ok ? `${j.pages ? `${j.pages} page${j.pages === 1 ? "" : "s"} · ` : ""}${when(j.completed || j.created)}`
+      : `${j.state === "cancelled" ? "Cancelled" : "Failed"} · ${when(j.completed || j.created)}`;
+    return `
+    <div class="job done ${ok ? "" : "failed"}">
+      <div class="job-icon">${icon(ok ? "i-check" : "i-ban", 17)}</div>
+      <div class="grow"><div class="job-title">${esc(j.title || "Untitled")}</div>
+        <div class="job-sub">${esc(j.printer)} · ${esc(what)}</div></div>
+      <button class="btn icon ghost job-remove" title="Remove from history" data-remove="${esc(j.id)}">${icon("i-trash", 16)}</button>
+    </div>`;
+  };
+  body.innerHTML = `
+    <div class="muted-title" style="margin-top:4px">Printing now</div>
+    ${active.length ? active.map(live).join("") : '<div class="empty-note">Nothing printing right now</div>'}
+    <div class="history-head"><div class="muted-title">History</div>
+      ${recent.length ? `<button class="btn sm ghost" id="clearHistory">${icon("i-trash", 14)}Clear all</button>` : ""}</div>
+    ${recent.length ? recent.map(done).join("") : '<div class="empty-note">No past prints</div>'}`;
   $$("[data-cancel]", body).forEach((b) => b.addEventListener("click", async () => {
     try { await api("/api/cancel", { id: b.dataset.cancel }); toast("Job cancelled"); pollJobs(); }
     catch (e) { toast(e.message, "bad"); }
   }));
+  $$("[data-remove]", body).forEach((b) => b.addEventListener("click", async () => {
+    const row = b.closest(".job");
+    row.classList.add("leaving");
+    try { await api("/api/history/remove", { ids: [b.dataset.remove] }); setTimeout(pollJobs, 180); }
+    catch (e) { row.classList.remove("leaving"); toast(e.message, "bad"); }
+  }));
+  const clear = $("#clearHistory", body);
+  if (clear) armed(clear, `${icon("i-trash", 14)}Clear ${recent.length}?`, async () => {
+    try { const r = await api("/api/history/clear", {}); toast(`Removed ${r.removed} print${r.removed === 1 ? "" : "s"} from history`); pollJobs(); }
+    catch (e) { toast(e.message, "bad"); }
+  });
 }
 
 async function openQueue() {
   $("#overlay").innerHTML = `<div class="scrim" style="place-items:stretch"></div>
     <aside class="drawer"><div class="drawer-head"><h2>Print queue</h2><button class="btn icon ghost" id="dClose">${icon("i-x")}</button></div>
-    <div class="drawer-body"><div class="center-note"><span class="spinner"></span></div></div></aside>`;
+    <div class="drawer-body"><div class="center-note"><span class="spinner"></span></div></div>
+    <div class="drawer-foot">
+      <div><b>App data</b><div class="hint" style="margin:0">Temporary copies of opened files, previews and saved settings</div></div>
+      <button class="btn sm" id="clearData">${icon("i-trash", 14)}Clear</button>
+    </div></aside>`;
   $("#overlay .scrim").onclick = closeOverlay;
   $("#dClose").onclick = closeOverlay;
+  armed($("#clearData"), `${icon("i-trash", 14)}Sure?`, async () => {
+    try {
+      const r = await api("/api/clear-data", { keep: state.doc?.id });
+      try { Object.keys(localStorage).filter((k) => k.startsWith("lps.")).forEach((k) => localStorage.removeItem(k)); } catch { /* ignore */ }
+      state.s = { ...structuredClone(DEFAULTS), media: state.s.media };
+      state.zoom = 1;
+      update({});
+      const mb = r.freed / 1048576;
+      toast(`App data cleared${r.freed ? ` · ${mb >= 1 ? mb.toFixed(1) + " MB" : Math.max(1, Math.round(r.freed / 1024)) + " KB"} freed` : ""}`);
+    } catch (e) { toast(e.message, "bad"); }
+  });
   await pollJobs();
 }
 

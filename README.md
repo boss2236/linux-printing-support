@@ -7,12 +7,13 @@ A friendly print dialog for Linux. Open a file, see exactly how it'll come out, 
 - **Layout:** auto / portrait / landscape, 1–16 pages per sheet, fit / fill / 100% / custom scale, and margin presets or custom margins in mm.
 - **Pages:** all, odd, even, or ranges like `1-3, 5, 8-`, plus copies, collation and reverse order.
 - **Color or black & white**, and draft / normal / high quality.
+- **Print history**: remove single prints or clear it all, and clear the app's temporary data.
 - **Printer status** with ink levels, paper-out and jam warnings, a print queue with cancel, and a one-click *Fix printing problems* button.
 - **Any file:** PDF, images, Word/Excel/PowerPoint/OpenDocument, text and EPUB. Office files are converted through LibreOffice.
 
 ## Which printers work?
 
-Any **driverless** printer, which covers nearly every printer sold since about 2010 that has the AirPrint, Mopria or IPP Everywhere logo. That includes most Canon PIXMA/MAXIFY/MegaTank, HP, Epson EcoTank, Brother and Samsung models.
+Any **driverless** printer, on any Linux distro, which covers nearly every printer sold since about 2010 that has the AirPrint, Mopria or IPP Everywhere logo. That includes most Canon PIXMA/MAXIFY/MegaTank, HP, Epson EcoTank, Brother and Samsung models.
 
 - **Wi-Fi / network printers** are found automatically.
 - **USB printers** work through [`ipp-usb`](https://github.com/OpenPrinting/ipp-usb), which the installer sets up. You don't need the manufacturer's Linux driver.
@@ -21,17 +22,20 @@ Printers aren't entered by hand. *Printer menu → Add a printer…* scans the n
 
 ## Install
 
-```sh
-git clone <this repo> && cd linux-printing-support
-./install.sh
-```
-
-The installer works on Arch, Debian/Ubuntu, Fedora and openSUSE. It installs CUPS, `ipp-usb`, Avahi and LibreOffice, then the app itself (through [uv](https://docs.astral.sh/uv/)), and adds it to your app launcher and to *Open with* for documents.
+One command, on Arch, Debian/Ubuntu (and Mint, Pop!_OS…), Fedora or openSUSE:
 
 ```sh
-./install.sh --app-only    # just the app; you already have CUPS and ipp-usb
-./install.sh --uninstall
+curl -fsSL https://raw.githubusercontent.com/boss2236/linux-printing-support/main/install.sh | bash
 ```
+
+The command installs the printing pieces your system needs: CUPS, `ipp-usb` for USB printers, and Avahi for network printers. It offers LibreOffice too, which you only need for Word/Excel/PowerPoint files. Then it installs the app (bringing its own Python through [uv](https://docs.astral.sh/uv/), so older distros work as well) and adds it to your app launcher and to *Open with*. It asks for your password once. Run the same command again to update.
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/boss2236/linux-printing-support/main/install.sh | bash -s -- --app-only    # skip system packages
+curl -fsSL https://raw.githubusercontent.com/boss2236/linux-printing-support/main/install.sh | bash -s -- --uninstall
+```
+
+From a clone, run `./install.sh` (it takes the same options).
 
 ## Use
 

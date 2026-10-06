@@ -20,6 +20,7 @@ import pymupdf
 from . import cups, layout
 
 WORK = Path(tempfile.mkdtemp(prefix="lps-"))
+layout.CONVERT_DIR = WORK
 STATIC = resources.files(__package__) / "static"
 LOCK = threading.RLock()  # MuPDF documents are not thread-safe
 
@@ -29,7 +30,6 @@ class Store:
         self.docs: dict[str, dict] = {}
         self.imposed: dict[str, pymupdf.Document] = {}
         self.pending_backs: dict[str, dict] = {}
-        self.titles: dict[str, str] = {}
         self.initial: list[str] = []
 
     def add_file(self, path: Path, name: str | None = None) -> dict:
@@ -38,8 +38,23 @@ class Store:
         first = doc[0].rect if doc.page_count else pymupdf.Rect(0, 0, 595, 842)
         meta = {"id": doc_id, "name": name or path.name, "pages": doc.page_count,
                 "landscape": first.width > first.height}
-        self.docs[doc_id] = {**meta, "doc": doc}
+        self.docs[doc_id] = {**meta, "doc": doc, "path": str(path)}
         return meta
+
+    def clear(self, keep: str | None = None) -> dict:
+        """Forget every open document, preview and temp file (except the doc on screen)."""
+        with LOCK:
+            kept = self.docs.get(keep or "")
+            self.docs = {keep: kept} if kept else {}
+            self.imposed.clear()
+            self.pending_backs.clear()
+            freed = 0
+            keep_file = kept.get("path") if kept else None
+            for f in WORK.rglob("*"):
+                if f.is_file() and str(f) != keep_file:
+                    freed += f.stat().st_size
+                    f.unlink(missing_ok=True)
+        return {"ok": True, "freed": freed}
 
     def impose(self, doc_id: str, settings: dict) -> tuple[str, pymupdf.Document]:
         entry = self.docs.get(doc_id)
@@ -129,15 +144,9 @@ class Handler(BaseHTTPRequestHandler):
                 self._json({"printers": [x.to_dict() for x in cups.list_printers(refresh)],
                             "ipp_usb": cups.ipp_usb_status()})
             elif p == "/api/jobs":
-                jobs = cups.list_jobs()
-                for j in jobs:
-                    j["title"] = STORE.titles.get(j["id"], "")
-                recent = cups.recent_jobs()
-                for j in recent:
-                    j["title"] = STORE.titles.get(j["id"], "")
-                self._json({"active": jobs, "recent": recent})
+                self._json({"active": cups.get_jobs("not-completed"), "recent": cups.get_jobs("completed")[:50]})
             elif p == "/api/initial":
-                self._json({"docs": [{k: v for k, v in STORE.docs[i].items() if k != "doc"}
+                self._json({"docs": [{k: v for k, v in STORE.docs[i].items() if k not in ("doc", "path")}
                                      for i in STORE.initial if i in STORE.docs]})
                 STORE.initial.clear()
             elif p == "/api/discover":
@@ -197,9 +206,16 @@ class Handler(BaseHTTPRequestHandler):
                 if not pending:
                     return self._error("Nothing waiting to print")
                 ok, res = cups.submit(**pending)
-                if ok:
-                    STORE.titles[res] = pending["title"]
                 return self._json({"ok": ok, "job": res}) if ok else self._error(res)
+            if p == "/api/history/remove":
+                ok, msg = cups.remove_from_history(req.get("ids", []))
+                return self._json({"ok": ok}) if ok else self._error(msg or "Could not remove")
+            if p == "/api/history/clear":
+                ids = [j["id"] for j in cups.get_jobs("completed")]
+                ok, msg = cups.remove_from_history(ids)
+                return self._json({"ok": ok, "removed": len(ids)}) if ok else self._error(msg or "Could not clear history")
+            if p == "/api/clear-data":
+                return self._json(STORE.clear(keep=req.get("keep")))
             if p == "/api/cancel":
                 ok, msg = cups.cancel_job(req["id"])
                 return self._json({"ok": ok}) if ok else self._error(msg or "Could not cancel")
@@ -250,7 +266,6 @@ class Handler(BaseHTTPRequestHandler):
         ok, res = cups.submit(printer, str(path), title, opts, copies)
         if not ok:
             return self._error(res or "The print system refused the job")
-        STORE.titles[res] = title
         if not manual:
             return self._json({"ok": True, "job": res})
         ticket = secrets.token_hex(6)
