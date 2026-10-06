@@ -62,3 +62,7 @@ src/linux_printing_support/
   cups.py       printers, capabilities, jobs, discovery, repair
   static/       the UI (plain HTML/CSS/JS, no build step)
 ```
+
+## License
+
+[Apache License 2.0](LICENSE). You're free to use, change and share this project, including in your own projects. If you copy or redistribute it, you must keep the [NOTICE](NOTICE) file crediting the original project, [boss2236/linux-printing-support](https://github.com/boss2236/linux-printing-support), and say what you changed.
