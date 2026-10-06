@@ -1,0 +1,19 @@
+[project]
+name = "linux-printing-support"
+version = "1.0.0"
+description = "A friendly print dialog for Linux: live preview, two-sided, layout and margins, for any driverless printer."
+readme = "README.md"
+authors = [
+    { name = "boss2236", email = "muntasirmahmud776@gmail.com" }
+]
+requires-python = ">=3.13"
+dependencies = [
+    "pymupdf>=1.28.2",
+]
+
+[project.scripts]
+linux-printing-support = "linux_printing_support:main"
+
+[build-system]
+requires = ["uv_build>=0.11.16,<0.12.0"]
+build-backend = "uv_build"

@@ -1,0 +1,234 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Linux Printing Support</title>
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="app.css">
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="i-printer" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 9V3.5h10V9"/><rect x="3" y="9" width="18" height="8" rx="2"/><path d="M7 14h10v6.5H7z"/><circle cx="17.5" cy="11.8" r=".6" fill="currentColor"/></symbol>
+    <symbol id="i-file" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/></symbol>
+    <symbol id="i-open" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></symbol>
+    <symbol id="i-upload" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V4m0 0L7.5 8.5M12 4l4.5 4.5"/><path d="M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/></symbol>
+    <symbol id="i-queue" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6h12M8 12h12M8 18h12"/><circle cx="4" cy="6" r="1" fill="currentColor"/><circle cx="4" cy="12" r="1" fill="currentColor"/><circle cx="4" cy="18" r="1" fill="currentColor"/></symbol>
+    <symbol id="i-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+    <symbol id="i-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></symbol>
+    <symbol id="i-minus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12h14"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-up" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 15l6-6 6 6"/></symbol>
+    <symbol id="i-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></symbol>
+    <symbol id="i-zoom-in" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.2-4.2M11 8.5v5M8.5 11h5"/></symbol>
+    <symbol id="i-zoom-out" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.2-4.2M8.5 11h5"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></symbol>
+    <symbol id="i-alert" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5L2.5 20h19z"/><path d="M12 10v4.5M12 17.5v.01"/></symbol>
+    <symbol id="i-wrench" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 6.5a4 4 0 0 0 5 5L13 18a2.1 2.1 0 0 1-3-3l6.5-6.5"/><path d="M14.5 6.5L17 4l3 3-2.5 2.5"/><path d="M4 20l5-5"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.2-4.2"/></symbol>
+    <symbol id="i-star" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M12 3.5l2.6 5.4 5.9.8-4.3 4.1 1 5.8L12 16.8l-5.2 2.8 1-5.8-4.3-4.1 5.9-.8z"/></symbol>
+    <symbol id="i-refresh" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8 8 0 0 0-14.3-4.9L4 8"/><path d="M4 3.5V8h4.5"/><path d="M4 13a8 8 0 0 0 14.3 4.9L20 16"/><path d="M20 20.5V16h-4.5"/></symbol>
+    <!-- orientation / duplex pictograms -->
+    <symbol id="i-auto" viewBox="0 0 28 28" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><rect x="5" y="3" width="13" height="18" rx="1.5"/><rect x="10" y="12" width="15" height="11" rx="1.5" fill="var(--panel)"/></symbol>
+    <symbol id="i-portrait" viewBox="0 0 28 28" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><rect x="7.5" y="3" width="13" height="22" rx="1.5"/><path d="M10.5 8h7M10.5 11.5h7M10.5 15h4" stroke-linecap="round"/></symbol>
+    <symbol id="i-landscape" viewBox="0 0 28 28" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><rect x="3" y="7.5" width="22" height="13" rx="1.5"/><path d="M6.5 11.5h11M6.5 15h7" stroke-linecap="round"/></symbol>
+    <symbol id="i-single" viewBox="0 0 28 28" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><rect x="7.5" y="3" width="13" height="22" rx="1.5"/><path d="M11 9h6M11 12.5h6M11 16h4" stroke-linecap="round"/></symbol>
+    <symbol id="i-long" viewBox="0 0 28 28" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"><rect x="4" y="5" width="10" height="18" rx="1.2"/><rect x="14" y="5" width="10" height="18" rx="1.2"/><path d="M14 3v22" stroke-dasharray="2 2"/></symbol>
+    <symbol id="i-short" viewBox="0 0 28 28" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"><rect x="6" y="2.5" width="16" height="11" rx="1.2"/><rect x="6" y="14.5" width="16" height="11" rx="1.2"/><path d="M4 14h20" stroke-dasharray="2 2"/></symbol>
+  </defs>
+</svg>
+
+<div class="app">
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-mark"><svg width="18" height="18"><use href="#i-printer"/></svg></div>
+      <span class="brand-text">Linux Printing Support</span>
+    </div>
+    <div class="doc-chip hidden" id="docChip">
+      <svg class="doc-icon" width="16" height="16"><use href="#i-file"/></svg>
+      <span class="doc-name" id="docName"></span>
+      <span class="doc-meta" id="docMeta"></span>
+      <button class="btn round" id="closeDoc" title="Close document"><svg width="14" height="14"><use href="#i-x"/></svg></button>
+    </div>
+    <div class="spacer" id="topSpacer"></div>
+    <div class="top-actions">
+      <button class="btn" id="openBtn"><svg width="16" height="16"><use href="#i-open"/></svg>Open file</button>
+      <button class="btn" id="queueBtn" title="Print queue"><svg width="16" height="16"><use href="#i-queue"/></svg>Queue <span class="badge hidden" id="queueBadge">0</span></button>
+    </div>
+  </header>
+
+  <div class="main">
+    <section class="stage" id="stage">
+      <div class="empty" id="empty">
+        <div class="drop" id="drop">
+          <div class="drop-art"><svg width="40" height="40"><use href="#i-upload"/></svg></div>
+          <h1>Drop a file to print</h1>
+          <p>or pick one from your computer. You'll see exactly how it prints before it does.</p>
+          <button class="btn primary" id="emptyOpen"><svg width="16" height="16"><use href="#i-open"/></svg>Choose file</button>
+          <div class="formats"><span>PDF</span><span>JPG</span><span>PNG</span><span>DOCX</span><span>XLSX</span><span>PPTX</span><span>ODT</span><span>TXT</span><span>EPUB</span></div>
+        </div>
+      </div>
+      <div class="sheets hidden" id="sheets"></div>
+      <div class="stage-hud hidden" id="hud">
+        <button class="btn" id="prevSheet" title="Previous sheet"><svg width="16" height="16"><use href="#i-up"/></svg></button>
+        <span class="count" id="sheetCount">Sheet 1 of 1</span>
+        <button class="btn" id="nextSheet" title="Next sheet"><svg width="16" height="16"><use href="#i-down"/></svg></button>
+        <span class="sep"></span>
+        <button class="btn" id="zoomOut" title="Zoom out"><svg width="16" height="16"><use href="#i-zoom-out"/></svg></button>
+        <button class="btn" id="zoomIn" title="Zoom in"><svg width="16" height="16"><use href="#i-zoom-in"/></svg></button>
+      </div>
+      <div class="busy hidden" id="busy"><span class="spinner"></span><span id="busyText">Updating preview…</span></div>
+    </section>
+
+    <aside class="panel">
+      <div class="panel-scroll">
+        <div class="section">
+          <div class="section-title">Printer</div>
+          <div class="picker-wrap" id="pickerWrap">
+            <button class="printer-card" id="printerCard">
+              <div class="printer-glyph"><svg width="20" height="20"><use href="#i-printer"/></svg><span class="status-dot" id="pDot"></span></div>
+              <div class="printer-text"><div class="printer-name" id="pName">Looking for printers…</div><div class="printer-sub" id="pSub">&nbsp;</div></div>
+              <svg class="chev" width="16" height="16"><use href="#i-chev"/></svg>
+            </button>
+            <div class="menu hidden" id="printerMenu"></div>
+          </div>
+          <div id="printerAlert"></div>
+          <div class="ink" id="ink"></div>
+        </div>
+
+        <div class="section">
+          <div class="row">
+            <div><div class="field-label" style="margin:0">Copies</div></div>
+            <div class="stepper">
+              <button id="copiesDown" aria-label="Fewer copies"><svg width="14" height="14"><use href="#i-minus"/></svg></button>
+              <input id="copies" type="number" min="1" max="99" value="1" aria-label="Copies">
+              <button id="copiesUp" aria-label="More copies"><svg width="14" height="14"><use href="#i-plus"/></svg></button>
+            </div>
+          </div>
+          <div class="row hidden" id="collateRow">
+            <div><div class="field-label" style="margin:0">Collate</div><div class="hint" style="margin:0">1 2 3, 1 2 3 instead of 1 1, 2 2, 3 3</div></div>
+            <label class="switch"><input type="checkbox" id="collate" checked><span></span></label>
+          </div>
+        </div>
+
+        <div class="section">
+          <div class="field">
+            <div class="field-label">Pages <small id="pagesHint"></small></div>
+            <div class="seg" data-setting="pagesMode">
+              <button data-v="all" class="on">All</button><button data-v="odd">Odd</button><button data-v="even">Even</button><button data-v="custom">Custom</button>
+            </div>
+            <input class="input hidden" id="pageRange" placeholder="e.g. 1-3, 5, 8-" style="margin-top:8px" autocomplete="off">
+          </div>
+        </div>
+
+        <div class="section">
+          <div class="field">
+            <div class="field-label">Two-sided</div>
+            <div class="seg tall" data-setting="sides">
+              <button data-v="one-sided" class="on"><svg width="24" height="24"><use href="#i-single"/></svg>One side</button>
+              <button data-v="two-sided-long-edge"><svg width="24" height="24"><use href="#i-long"/></svg>Long edge</button>
+              <button data-v="two-sided-short-edge"><svg width="24" height="24"><use href="#i-short"/></svg>Short edge</button>
+            </div>
+            <div class="hint" id="sidesHint">Prints on one side of each sheet.</div>
+          </div>
+        </div>
+
+        <div class="section">
+          <div class="field">
+            <div class="field-label">Orientation</div>
+            <div class="seg tall" data-setting="orientation">
+              <button data-v="auto" class="on"><svg width="24" height="24"><use href="#i-auto"/></svg>Auto</button>
+              <button data-v="portrait"><svg width="24" height="24"><use href="#i-portrait"/></svg>Portrait</button>
+              <button data-v="landscape"><svg width="24" height="24"><use href="#i-landscape"/></svg>Landscape</button>
+            </div>
+          </div>
+          <div class="field">
+            <div class="field-label">Pages per sheet</div>
+            <div class="chips" id="perSheet"></div>
+          </div>
+          <div class="row hidden" id="bordersRow">
+            <div class="field-label" style="margin:0">Draw page borders</div>
+            <label class="switch"><input type="checkbox" id="borders"><span></span></label>
+          </div>
+        </div>
+
+        <div class="section">
+          <div class="field">
+            <div class="field-label">Paper size</div>
+            <select class="select" id="media"></select>
+          </div>
+          <div class="field">
+            <div class="field-label">Scale</div>
+            <div class="seg" data-setting="scale_mode">
+              <button data-v="fit" class="on">Fit</button><button data-v="fill">Fill</button><button data-v="actual">100%</button><button data-v="custom">Custom</button>
+            </div>
+            <div class="input-suffix hidden" id="scaleWrap" style="margin-top:8px"><input class="input" id="scale" type="number" min="10" max="400" value="100"><span>%</span></div>
+            <div class="hint" id="scaleHint">Shrinks or enlarges each page to fit the paper.</div>
+          </div>
+          <div class="field">
+            <div class="field-label">Margins</div>
+            <div class="seg" data-setting="margins">
+              <button data-v="none">None</button><button data-v="narrow">Narrow</button><button data-v="normal" class="on">Normal</button><button data-v="wide">Wide</button><button data-v="custom">Custom</button>
+            </div>
+            <div class="margin-grid hidden" id="marginGrid">
+              <div><input class="input" data-m="top" type="number" min="0" max="80" step="0.5" value="10"><label>Top</label></div>
+              <div><input class="input" data-m="right" type="number" min="0" max="80" step="0.5" value="10"><label>Right</label></div>
+              <div><input class="input" data-m="bottom" type="number" min="0" max="80" step="0.5" value="10"><label>Bottom</label></div>
+              <div><input class="input" data-m="left" type="number" min="0" max="80" step="0.5" value="10"><label>Left</label></div>
+            </div>
+            <div class="hint hidden" id="marginHint">In millimetres.</div>
+          </div>
+        </div>
+
+        <div class="section">
+          <div class="field">
+            <div class="field-label">Color</div>
+            <div class="seg" data-setting="color">
+              <button data-v="color" class="on">Color</button><button data-v="gray">Black &amp; white</button>
+            </div>
+          </div>
+          <div class="field">
+            <div class="field-label">Quality</div>
+            <div class="seg" data-setting="quality">
+              <button data-v="draft">Draft</button><button data-v="normal" class="on">Normal</button><button data-v="high">High</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="section">
+          <details class="more">
+            <summary>More options <svg class="chev" width="16" height="16"><use href="#i-chev"/></svg></summary>
+            <div class="more-body">
+              <div class="row">
+                <div><div class="field-label" style="margin:0">Reverse order</div><div class="hint" style="margin:0">Last page prints first</div></div>
+                <label class="switch"><input type="checkbox" id="reverse"><span></span></label>
+              </div>
+              <div class="row">
+                <div><div class="field-label" style="margin:0">Manual two-sided</div><div class="hint" style="margin:0">For printers that can't flip paper: prints the fronts, then asks you to turn the stack over</div></div>
+                <label class="switch"><input type="checkbox" id="manualDuplex"><span></span></label>
+              </div>
+              <div class="row">
+                <div><div class="field-label" style="margin:0">Reset all settings</div></div>
+                <button class="btn sm" id="resetBtn">Reset</button>
+              </div>
+            </div>
+          </details>
+        </div>
+      </div>
+
+      <div class="panel-foot">
+        <div class="summary"><span id="summaryLeft">No document</span><span id="summaryRight"></span></div>
+        <button class="btn primary print-btn" id="printBtn" disabled><svg width="18" height="18"><use href="#i-printer"/></svg>Print <kbd>Ctrl P</kbd></button>
+      </div>
+    </aside>
+  </div>
+</div>
+
+<input type="file" id="fileInput" hidden>
+<div class="toasts" id="toasts"></div>
+<div id="overlay"></div>
+
+<script src="app.js"></script>
+</body>
+</html>

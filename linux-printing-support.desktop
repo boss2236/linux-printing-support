@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=Linux Printing Support
+GenericName=Print
+Comment=Print documents with a live preview: two-sided, layout, margins and more
+Exec=@BIN@ %F
+Icon=linux-printing-support
+Terminal=false
+Categories=Office;Utility;Printing;
+Keywords=print;printer;pdf;duplex;two-sided;
+StartupWMClass=linux-printing-support
+MimeType=application/pdf;image/png;image/jpeg;image/webp;image/gif;image/bmp;image/tiff;image/svg+xml;text/plain;text/markdown;text/csv;text/html;application/rtf;application/msword;application/vnd.openxmlformats-officedocument.wordprocessingml.document;application/vnd.ms-excel;application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;application/vnd.ms-powerpoint;application/vnd.openxmlformats-officedocument.presentationml.presentation;application/vnd.oasis.opendocument.text;application/vnd.oasis.opendocument.spreadsheet;application/vnd.oasis.opendocument.presentation;application/epub+zip;application/oxps;application/vnd.ms-xpsdocument;
