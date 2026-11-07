@@ -110,11 +110,61 @@ async function loadPrinters(refresh = false) {
   const wanted = state.printer?.name || store.get("printer", null);
   const pick = printerByName(wanted) || state.printers.find((p) => p.is_default) || state.printers[0] || null;
   setPrinter(pick, false);
+  autoRoute(true);
+}
+
+// ------------------------------------------------------------ automatic USB / Wi-Fi switching
+// When one printer is set up both ways, print over USB while the cable is connected and over
+// Wi-Fi when it isn't. Picking one by hand pauses this until the cable is plugged in or out.
+const modelKey = (p) => (p?.model || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+
+function usbOnline(p) {
+  const port = (p.uri.match(/:\/\/(?:localhost|127\.0\.0\.1|\[::1\]):(\d+)/) || [])[1];
+  const devs = (state.ippUsb?.devices || []).filter((d) => d.status === "OK");
+  const key = modelKey(p);
+  return devs.some((d) => d.port === port || (key && modelKey({ model: d.model }).includes(key)));
+}
+
+function routeGroup(p) {
+  if (!p || p.temporary || !modelKey(p)) return null;
+  const same = state.printers.filter((x) => !x.temporary && modelKey(x) === modelKey(p));
+  const usb = same.find((x) => x.connection === "usb" && /localhost|127\.0\.0\.1|\[::1\]/.test(x.uri));
+  const net = same.find((x) => x.connection === "network");
+  return usb && net ? { usb, net } : null;
+}
+
+const autoSwitchOn = () => store.get("autoSwitch", true);
+
+function autoRoute(quiet = false) {
+  const g = routeGroup(state.printer);
+  if (!g || !autoSwitchOn()) return;
+  const online = usbOnline(g.usb);
+  if (state.manualPin && state.manualPin.online === online) return;
+  state.manualPin = null;
+  const want = online ? g.usb : g.net;
+  if (want.name === state.printer.name) return;
+  setPrinter(want, false);
+  if (!quiet) toast(online ? "Printer cable connected: printing over USB" : "Printer cable unplugged: printing over Wi-Fi", "ok", 5000);
+}
+
+async function refreshRoute() {
+  if (!routeGroup(state.printer) || !autoSwitchOn()) return;
+  try {
+    const data = await api("/api/printers");
+    state.printers = data.printers;
+    state.ippUsb = data.ipp_usb;
+    state.printer = printerByName(state.printer.name) || state.printer;
+  } catch { return; }
+  autoRoute();
 }
 
 function setPrinter(p, userChose = true) {
   const changed = state.printer?.name !== p?.name;
   state.printer = p;
+  if (userChose) {
+    const g = routeGroup(p);
+    state.manualPin = g ? { online: usbOnline(g.usb) } : null;
+  }
   if (p && userChose) store.set("printer", p.name);
   if (changed) { state.conn = null; loadConnection(); }
   renderPrinter();
@@ -328,7 +378,11 @@ async function wifiDialog() {
           ? `<p>This printer is set up for Wi-Fi printing as “${esc(wifiQueue.info || wifiQueue.name)}”.</p>
              <div class="row-actions">${usingWifi ? `<span class="ok-note">${icon("i-check", 16)}Printing over Wi-Fi</span>`
                : `<button class="btn sm primary" id="useWifi">${icon("i-wifi", 15)}Print over Wi-Fi</button>`}
-               ${c.queues.some((q) => q.kind === "usb") && usingWifi ? `<button class="btn sm" id="useUsb">${icon("i-usb", 15)}Switch back to USB</button>` : ""}</div>`
+               ${c.queues.some((q) => q.kind === "usb") && usingWifi ? `<button class="btn sm" id="useUsb">${icon("i-usb", 15)}Switch back to USB</button>` : ""}</div>
+             ${c.queues.some((q) => q.kind === "usb") ? `<div class="row" style="margin-top:14px">
+               <div><div class="field-label" style="margin:0">Switch automatically</div>
+                 <div class="hint" style="margin:0">USB while the cable is connected, Wi-Fi when it isn't</div></div>
+               <label class="switch"><input type="checkbox" id="autoSwitch" ${autoSwitchOn() ? "checked" : ""}><span></span></label></div>` : ""}`
           : `<p>The printer is on your network, so you can print from anywhere in the house with no cable. Set it up once; you'll be asked for your password.</p>
              <div class="row-actions"><button class="btn sm primary" id="addWifi">${icon("i-wifi", 15)}Set up Wi-Fi printing</button></div>`}
       </div>
@@ -371,6 +425,11 @@ async function wifiDialog() {
       try { await api("/api/open-url", { url: b.dataset.open }); toast("Opened the printer's settings in your browser"); }
       catch (e) { toast(e.message, "bad"); }
     }));
+    $("#autoSwitch", body)?.addEventListener("change", (e) => {
+      store.set("autoSwitch", e.target.checked);
+      state.manualPin = null;
+      if (e.target.checked) { autoRoute(); draw(c); }
+    });
     $("#useWifi", body)?.addEventListener("click", () => { setPrinter(printerByName(wifiQueue.name)); toast("Now printing over Wi-Fi"); draw(c); });
     $("#useUsb", body)?.addEventListener("click", () => {
       setPrinter(printerByName(c.queues.find((q) => q.kind === "usb").name)); toast("Now printing over USB"); draw(c);
@@ -692,6 +751,7 @@ function updateSummary() {
 
 async function doPrint() {
   if ($("#printBtn").disabled) return;
+  await refreshRoute();  // the cable may have been unplugged since the last check
   const s = state.s;
   const body = {
     doc_id: state.doc.id, printer: state.printer.name, settings: layoutSettings(), copies: s.copies, collate: s.collate,
@@ -909,6 +969,7 @@ async function boot() {
       state.printers = data.printers; state.ippUsb = data.ipp_usb;
       const p = printerByName(before);
       if (p) { state.printer = p; renderPrinter(); loadConnection(); }
+      autoRoute();
     } catch { /* keep the last known state */ }
   }, 20000);
 }
