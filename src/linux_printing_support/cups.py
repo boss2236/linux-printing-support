@@ -130,7 +130,14 @@ class Printer:
     ink: list[dict] = field(default_factory=list)
 
     def to_dict(self) -> dict:
-        return self.__dict__.copy()
+        return {**self.__dict__, "connection": connection_kind(self.uri) if self.uri else ""}
+
+
+def connection_kind(uri: str) -> str:
+    """'usb' for direct/ipp-usb devices, 'network' for Wi-Fi or Ethernet."""
+    m = re.match(r"[a-z]+://\[?([^/:\]]+)", uri)
+    host = (m.group(1) if m else "").lower()
+    return "usb" if uri.startswith("usb:") or host in ("localhost", "127.0.0.1", "::1") else "network"
 
 
 _cache: dict[str, tuple[float, Printer]] = {}
@@ -293,7 +300,8 @@ def discover() -> list[dict]:
     out = text(["ippfind", "-T", "4", "_ipp._tcp", "-p"], timeout=10) if shutil.which("ippfind") else ""
     found, seen = [], set()
     me = socket.gethostname().lower()
-    configured = {(_norm(p.model), p.uri) for p in list_printers() if not p.temporary}
+    # A printer set up over USB isn't "set up" for Wi-Fi too, so compare the connection type as well.
+    configured = {(_norm(p.model), p.uri, connection_kind(p.uri)) for p in list_printers() if not p.temporary}
     for uri in out.split():
         # ipp-usb advertises USB printers under this machine's own hostname.
         uri = re.sub(rf"//({re.escape(me)}\.local|127\.0\.0\.1)(?=:)", "//localhost", uri, flags=re.I)
@@ -303,8 +311,9 @@ def discover() -> list[dict]:
         a = _ipp_attrs(uri, ["printer-make-and-model", "printer-info"], timeout=5)
         model = (a.get("printer-make-and-model") or a.get("printer-info") or [uri])[0].replace(" - IPP Everywhere", "")
         usb = uri.startswith("ipp://localhost:")
+        kind = connection_kind(uri)
         found.append({"uri": uri, "model": model, "usb": usb,
-                      "configured": any(u == uri or (m and m in _norm(model)) for m, u in configured)})
+                      "configured": any(u == uri or (m and m in _norm(model) and k == kind) for m, u, k in configured)})
     return found
 
 
@@ -337,10 +346,11 @@ def _pkexec(script: str) -> tuple[bool, str]:
     return r.returncode == 0, (r.stdout + r.stderr).decode().strip()
 
 
-def add_printer(name: str, uri: str) -> tuple[bool, str]:
-    name = re.sub(r"[^A-Za-z0-9_-]+", "-", name).strip("-")[:60] or "Printer"
+def add_printer(name: str, uri: str, info: str = "") -> tuple[bool, str]:
+    queue = re.sub(r"[^A-Za-z0-9_-]+", "-", name).strip("-")[:60] or "Printer"
     uri_q = uri.replace("'", "")
-    return _pkexec(f"lpadmin -p '{name}' -E -v '{uri_q}' -m everywhere")
+    desc = f" -D '{info.replace(chr(39), '')}'" if info else ""
+    return _pkexec(f"lpadmin -p '{queue}' -E -v '{uri_q}' -m everywhere{desc}")
 
 
 def remove_printer(name: str) -> tuple[bool, str]:

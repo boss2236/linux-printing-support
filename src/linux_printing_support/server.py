@@ -27,14 +27,16 @@ import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from importlib import resources
 from pathlib import Path
-from urllib.parse import unquote, urlparse
+from urllib.parse import parse_qs, unquote, urlparse
 
 import pymupdf
 
-from . import cups, layout
+from . import cups, layout, network, scan
 
 WORK = Path(tempfile.mkdtemp(prefix="lps-"))
 layout.CONVERT_DIR = WORK
+SCANS = WORK / "scans"
+SCANS.mkdir()
 STATIC = resources.files(__package__) / "static"
 LOCK = threading.RLock()  # MuPDF documents are not thread-safe
 
@@ -68,6 +70,7 @@ class Store:
                 if f.is_file() and str(f) != keep_file:
                     freed += f.stat().st_size
                     f.unlink(missing_ok=True)
+            scan.PAGES.clear()
         return {"ok": True, "freed": freed}
 
     def impose(self, doc_id: str, settings: dict) -> tuple[str, pymupdf.Document]:
@@ -119,8 +122,8 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(code)
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(body)))
-        self.send_header("Cache-Control", "no-store")
-        for k, v in (extra or {}).items():
+        extra = {"Cache-Control": "no-store", **(extra or {})}
+        for k, v in extra.items():
             self.send_header(k, v)
         self.end_headers()
         self.wfile.write(body)
@@ -150,8 +153,11 @@ class Handler(BaseHTTPRequestHandler):
             return self._static(p)
         if p.startswith("/api/sheet/"):  # images are loaded by <img>, token rides in the path
             return self._sheet(p)
+        if p.startswith("/api/scanpage/"):
+            return self._scanpage(p)
         if not self._authed():
             return
+        q = {k: v[0] for k, v in parse_qs(url.query).items()}
         try:
             if p == "/api/printers":
                 refresh = "refresh" in url.query
@@ -165,8 +171,23 @@ class Handler(BaseHTTPRequestHandler):
                 STORE.initial.clear()
             elif p == "/api/discover":
                 self._json({"found": cups.discover()})
+            elif p == "/api/connection":
+                self._json(network.connection(q.get("printer", "")))
+            elif p == "/api/scanners":
+                self._json({"scanners": scan.list_scanners(),
+                            "folder": str(scan.default_folder()), "name": scan.default_name()})
+            elif p == "/api/scanner":
+                s = self._scanner(q.get("id", ""))
+                self._json({"caps": scan.capabilities(s["base"]), "status": scan.status(s["base"])})
+            elif p == "/api/scanner/status":
+                self._json(scan.status(self._scanner(q.get("id", ""))["base"]))
+            elif p == "/api/scan/status":
+                job = scan.JOBS.get(q.get("job", ""))
+                self._json(job.to_dict()) if job else self._error("No such scan", 404)
             else:
                 self._error("not found", 404)
+        except KeyError as e:
+            self._error(str(e).strip("'\""), 404)
         except Exception as e:  # noqa: BLE001 - surface any failure to the UI
             self._error(str(e), 500)
 
@@ -179,6 +200,20 @@ class Handler(BaseHTTPRequestHandler):
             return self._error("not found", 404)
         ctype = mimetypes.guess_type(name)[0] or "application/octet-stream"
         self._send(200, f.read_bytes(), ctype + ("; charset=utf-8" if ctype.startswith("text") else ""))
+
+    def _scanner(self, scanner_id: str) -> dict:
+        s = next((x for x in scan.list_scanners() if x["id"] == scanner_id), None)
+        if not s:
+            raise KeyError("That scanner is no longer available")
+        return s
+
+    def _scanpage(self, p: str):
+        m = re.fullmatch(r"/api/scanpage/([^/]+)/([0-9a-f]+)(-full)?\.jpg", p)
+        page = scan.PAGES.get(m.group(2)) if m and m.group(1) == self.token else None
+        if not page:
+            return self._error("not found", 404)
+        self._send(200, Path(page["path" if m.group(3) else "preview"]).read_bytes(), "image/jpeg",
+                   {"Cache-Control": "private, max-age=3600"})
 
     def _sheet(self, p: str):
         m = re.fullmatch(r"/api/sheet/([^/]+)/([0-9a-f]+)/(\d+)(-g)?\.png", p)
@@ -240,19 +275,52 @@ class Handler(BaseHTTPRequestHandler):
                 ok, msg = cups.repair()
                 return self._json({"ok": ok, "message": msg}) if ok else self._error(msg or "Repair failed")
             if p == "/api/add-printer":
-                ok, msg = cups.add_printer(req["name"], req["uri"])
+                ok, msg = cups.add_printer(req["name"], req["uri"], req.get("info", ""))
                 cups._cache.clear()
                 return self._json({"ok": ok}) if ok else self._error(msg or "Could not add printer")
             if p == "/api/remove-printer":
                 ok, msg = cups.remove_printer(req["name"])
                 cups._cache.clear()
                 return self._json({"ok": ok}) if ok else self._error(msg or "Could not remove printer")
+            if p == "/api/scan":
+                job = scan.start(req.get("scanner", ""), req.get("settings", {}), SCANS)
+                return self._json(job.to_dict())
+            if p == "/api/scan/cancel":
+                job = scan.JOBS.get(req.get("job", ""))
+                if job:
+                    job.cancel()
+                return self._json({"ok": True})
+            if p == "/api/scan/discard":
+                for pid in req.get("ids", []):
+                    page = scan.PAGES.pop(pid, None)
+                    for f in (page or {}).values():
+                        if isinstance(f, str) and f.startswith(str(SCANS)):
+                            Path(f).unlink(missing_ok=True)
+                return self._json({"ok": True})
+            if p == "/api/scan/save":
+                paths = scan.save(req.get("pages", []), req.get("format", "pdf"), req.get("name", ""), req.get("folder", ""))
+                return self._json({"ok": True, "paths": paths})
+            if p == "/api/scan/to-print":
+                with LOCK:
+                    doc = scan.build_pdf(req.get("pages", []))
+                    path = save_pdf(doc, "scan")
+                    meta = STORE.add_file(path, (req.get("name") or scan.default_name()) + ".pdf")
+                return self._json(meta)
+            if p == "/api/pick-folder":
+                folder = scan.pick_folder(req.get("start", ""))
+                return self._json({"supported": folder is not None, "folder": folder or ""})
+            if p == "/api/show-in-folder":
+                scan.show_in_folder(req.get("path", ""))
+                return self._json({"ok": True})
+            if p == "/api/open-url":
+                ok, msg = network.open_url(req.get("url", ""))
+                return self._json({"ok": True}) if ok else self._error(msg)
             if p == "/api/close":
                 with LOCK:
                     STORE.docs.pop(req.get("doc_id", ""), None)
                 return self._json({"ok": True})
             self._error("not found", 404)
-        except layout.ConversionError as e:
+        except (layout.ConversionError, scan.ScanError) as e:
             self._error(str(e), 422)
         except (ValueError, KeyError) as e:
             self._error(str(e).strip("'\""), 400)

@@ -10,6 +10,8 @@ A friendly print dialog for Linux. Open a file, see exactly how it'll come out, 
 - **Print history**: remove single prints or clear it all, and clear the app's temporary data.
 - **Printer status** with ink levels, paper-out and jam warnings, a print queue with cancel, and a one-click *Fix printing problems* button.
 - **Any file:** PDF, images, Word/Excel/PowerPoint/OpenDocument, text and EPUB. Office files are converted through LibreOffice.
+- **Scanning.** Switch to *Scan* to use the scanner built into your printer, over USB or Wi-Fi, from the glass or the document feeder. Rotate, reorder and remove pages, then save as PDF, JPEG or PNG, or press *Print a copy* to use it as a photocopier. No SANE drivers needed: it speaks eSCL (AirScan / Mopria Scan) directly.
+- **Printer & Wi-Fi.** See whether the printer is connected by USB, Wi-Fi or both, with signal strength. Set it up for Wi-Fi printing in one click, or follow the guided steps to get a printer onto Wi-Fi. The app notices when it joins.
 
 ## Which printers work?
 
@@ -58,6 +60,8 @@ A small Python server (stdlib `http.server` + [PyMuPDF](https://pymupdf.readthed
 src/linux_printing_support/
   __init__.py   launcher (server + app window)
   server.py     local HTTP API
+  scan.py       eSCL scanning (discovery, scan jobs, saving)
+  network.py    USB / Wi-Fi connection info via mDNS
   layout.py     file conversion, imposition, preview rendering, manual duplex
   cups.py       printers, capabilities, jobs, discovery, repair
   static/       the UI (plain HTML/CSS/JS, no build step)

@@ -60,10 +60,17 @@ async function api(path, body, opts = {}) {
 }
 
 // ------------------------------------------------------------ toasts & overlays
-function toast(msg, kind = "ok", ms = 3800) {
+function toast(msg, kind = "ok", ms = 3800, action = null) {
   const el = document.createElement("div");
   el.className = `toast ${kind}`;
   el.innerHTML = `<span class="t-icon">${icon(kind === "bad" ? "i-alert" : "i-check")}</span><span>${esc(msg)}</span>`;
+  if (action) {
+    const b = document.createElement("button");
+    b.className = "t-act";
+    b.textContent = action.label;
+    b.onclick = () => { action.run(); el.remove(); };
+    el.append(b);
+  }
   $("#toasts").append(el);
   setTimeout(() => { el.classList.add("leave"); setTimeout(() => el.remove(), 300); }, ms);
 }
@@ -109,6 +116,7 @@ function setPrinter(p, userChose = true) {
   const changed = state.printer?.name !== p?.name;
   state.printer = p;
   if (p && userChose) store.set("printer", p.name);
+  if (changed) { state.conn = null; loadConnection(); }
   renderPrinter();
   renderMedia();
   applyCapabilities();
@@ -150,6 +158,7 @@ function renderPrinter() {
     alert = alertBox("Ink is running low", "You can keep printing for now.", "");
   }
   $("#printerAlert").innerHTML = alert;
+  renderConnRow();
   $("#printerAlert [data-act=repair]")?.addEventListener("click", repair);
   $("#printerAlert [data-act=setup]")?.addEventListener("click", () => setupPrinter(p.name.replace(/_/g, "-"), p.uri));
 }
@@ -175,6 +184,7 @@ function toggleMenu(force) {
   menu.innerHTML = `${items || '<div class="empty-note">No printers yet</div>'}
     <div class="menu-sep"></div>
     ${cur && !cur.is_default && !cur.temporary ? `<button class="menu-item subtle" data-act="default">${icon("i-star")}Make “${esc(cur.info || cur.name)}” my default</button>` : ""}
+    ${cur && !cur.temporary ? `<button class="menu-item subtle" data-act="wifi">${icon("i-wifi")}Printer &amp; Wi-Fi…</button>` : ""}
     <button class="menu-item subtle" data-act="add">${icon("i-search")}Add a printer…</button>
     <button class="menu-item subtle" data-act="repair">${icon("i-wrench")}Fix printing problems</button>
     <button class="menu-item subtle" data-act="refresh">${icon("i-refresh")}Refresh</button>`;
@@ -183,6 +193,7 @@ function toggleMenu(force) {
     toggleMenu(false);
     const act = b.dataset.act;
     if (act === "add") addPrinterDialog();
+    if (act === "wifi") wifiDialog();
     if (act === "repair") repair();
     if (act === "refresh") { await loadPrinters(true); toast("Printers refreshed"); }
     if (act === "default") {
@@ -231,16 +242,169 @@ async function addPrinterDialog() {
   }));
 }
 
-async function setupPrinter(name, uri) {
-  closeOverlay();
+async function setupPrinter(name, uri, { info = "", keepOpen = false } = {}) {
+  if (!keepOpen) closeOverlay();
   busy("Setting up printer… (enter your password if asked)");
   try {
-    await api("/api/add-printer", { name, uri });
+    await api("/api/add-printer", { name, uri, info });
     await loadPrinters(true);
     toast("Printer added");
+    return true;
   } catch (e) {
     toast(e.message === "Cancelled" ? "Setup cancelled" : e.message, "bad", 6000);
+    return false;
   } finally { busy(null); }
+}
+
+// ------------------------------------------------------------ connection (USB / Wi-Fi)
+const signalBars = (pct) => {
+  if (pct == null) return "";
+  const lit = pct >= 70 ? 4 : pct >= 45 ? 3 : pct >= 20 ? 2 : 1;
+  return `<span class="bars ${lit <= 1 ? "weak" : ""}" title="Wi-Fi signal ${pct}%">${[1, 2, 3, 4].map((i) => `<i class="${i <= lit ? "lit" : ""}"></i>`).join("")}</span>`;
+};
+const signalWord = (pct) => pct == null ? "" : pct >= 70 ? "Strong signal" : pct >= 45 ? "Good signal" : pct >= 20 ? "Fair signal" : "Weak signal";
+
+let connSeq = 0;
+async function loadConnection() {
+  const p = state.printer;
+  if (!p || p.temporary) { state.conn = null; renderConnRow(); return null; }
+  const seq = ++connSeq;
+  try {
+    const c = await api("/api/connection?printer=" + encodeURIComponent(p.name));
+    if (seq !== connSeq) return null;
+    state.conn = c;
+  } catch { if (seq === connSeq) state.conn = null; }
+  renderConnRow();
+  return state.conn;
+}
+
+function renderConnRow() {
+  const row = $("#connRow");
+  const p = state.printer;
+  if (!p || p.temporary || !p.connection) { row.classList.add("hidden"); return; }
+  const c = state.conn;
+  const cur = c?.current || p.connection;
+  const usbOn = cur === "usb", netOn = cur === "network";
+  const usbAvail = !!c?.usb, netAvail = !!c?.network;
+  const chip = (on, avail, ic, label, extra = "") =>
+    `<span class="conn-chip ${on ? "on" : avail ? "avail" : ""}">${icon(ic, 14)}${label}${extra}</span>`;
+  const parts = [];
+  if (usbOn || usbAvail) parts.push(chip(usbOn, usbAvail, "i-usb", "USB"));
+  if (netOn || netAvail) parts.push(chip(netOn, netAvail, "i-wifi", "Wi-Fi", c?.network ? " " + signalBars(c.network.signal) : ""));
+  if (!parts.length) parts.push(chip(true, false, cur === "usb" ? "i-usb" : "i-wifi", cur === "usb" ? "USB" : "Network"));
+  row.innerHTML = parts.join('<span class="dot-sep"></span>') +
+    `<span class="more">${c && !netAvail ? "Connect to Wi-Fi" : "Printer &amp; Wi-Fi"}${icon("i-chev-r", 14)}</span>`;
+  row.classList.remove("hidden");
+}
+
+async function wifiDialog() {
+  const p = state.printer;
+  if (!p) return;
+  const m = modal(`<div id="wifiBody"><h2>Printer &amp; Wi-Fi</h2><div class="center-note"><span class="spinner"></span>Checking how the printer is connected…</div></div>`);
+  m.classList.add("wide");
+  let watching = 0, wasOnline = null;
+  const stop = () => clearInterval(watching);
+  const obs = new MutationObserver(() => { if (!m.isConnected) { stop(); obs.disconnect(); } });
+  obs.observe($("#overlay"), { childList: true });
+
+  const draw = (c) => {
+    const body = $("#wifiBody", m);
+    if (!body) return;
+    const net = c.network, usb = c.usb;
+    const wifiQueue = c.queues.find((q) => q.kind === "network");
+    const usingWifi = state.printer?.name === wifiQueue?.name;
+    const card = (live, ic, title, sub, tag) => `
+      <div class="conn-card ${live ? "live" : ""}">
+        ${tag ? `<span class="cc-tag">${tag}</span>` : ""}
+        <div class="cc-icon">${icon(ic, 20)}</div><b>${title}</b><div class="cc-sub">${sub}</div>
+      </div>`;
+    const comp = c.computer.map((n) => n.type === "wifi" ? `Wi-Fi “${esc(n.name)}”` : "Ethernet").join(" and ");
+
+    let main = "";
+    if (net) {
+      main = `<div class="conn-section">
+        <h3>${icon("i-wifi", 18)}Print without the cable</h3>
+        ${wifiQueue
+          ? `<p>This printer is set up for Wi-Fi printing as “${esc(wifiQueue.info || wifiQueue.name)}”.</p>
+             <div class="row-actions">${usingWifi ? `<span class="ok-note">${icon("i-check", 16)}Printing over Wi-Fi</span>`
+               : `<button class="btn sm primary" id="useWifi">${icon("i-wifi", 15)}Print over Wi-Fi</button>`}
+               ${c.queues.some((q) => q.kind === "usb") && usingWifi ? `<button class="btn sm" id="useUsb">${icon("i-usb", 15)}Switch back to USB</button>` : ""}</div>`
+          : `<p>The printer is on your network, so you can print from anywhere in the house with no cable. Set it up once; you'll be asked for your password.</p>
+             <div class="row-actions"><button class="btn sm primary" id="addWifi">${icon("i-wifi", 15)}Set up Wi-Fi printing</button></div>`}
+      </div>
+      <div class="conn-section">
+        <h3>${icon("i-scan", 18)}Scan over Wi-Fi</h3>
+        <p style="margin:0">Nothing to set up. In <b>Scan</b>, pick the scanner marked Wi-Fi.</p>
+      </div>`;
+    } else {
+      main = `<div class="conn-section">
+        <h3>${icon("i-wifi", 18)}Connect this printer to Wi-Fi</h3>
+        <p>Once it's on your Wi-Fi, you can print and scan without the cable.</p>
+        <ol class="steps">
+          ${c.admin ? `<li><b>Use the printer's settings page</b>${usb ? ", which works over the USB cable right now" : ""}. Open <i>LAN settings → Wi-Fi</i> and pick your network.
+            If it asks for a password, it's usually the serial number printed on a sticker on the printer.<br>
+            <button class="btn sm primary" data-open="${esc(c.admin)}">${icon("i-ext", 15)}Open printer settings</button></li>` : ""}
+          <li><b>Or use the WPS button.</b> Press WPS on your router, then within two minutes hold the printer's Wi-Fi button until its light flashes.</li>
+          <li>Keep this window open. It notices when the printer joins your network.</li>
+        </ol>
+        <div class="waiting"><span class="spinner"></span>Waiting for the printer to join your network…</div>
+      </div>`;
+    }
+
+    body.innerHTML = `<h2>Printer &amp; Wi-Fi</h2>
+      <p>${esc(c.model || p.info || p.name)}</p>
+      <div class="conn-cards">
+        ${card(!!usb, "i-usb", "USB cable", usb ? "Connected" : "Not connected", c.current === "usb" && !usingWifi ? "In use" : "")}
+        ${card(!!net, "i-wifi", "Wi-Fi",
+          net ? `On your network${net.signal != null ? ` · ${signalWord(net.signal)} ${signalBars(net.signal)}` : ""}<br><span class="cc-mono">${esc(net.addr)}</span>` : "Not on your network",
+          c.current === "network" || usingWifi ? "In use" : "")}
+      </div>
+      ${main}
+      ${comp ? `<div class="foot-note">${icon("i-check", 14)}<span>This computer is on ${comp}. The printer needs to be on the same network.</span></div>` : ""}
+      <div class="actions split">
+        ${c.admin ? `<button class="btn" data-open="${esc(c.admin)}">${icon("i-ext", 15)}Printer settings page</button>` : "<span></span>"}
+        <button class="btn primary" id="wDone">Done</button>
+      </div>`;
+
+    $("#wDone", body).onclick = closeOverlay;
+    $$("[data-open]", body).forEach((b) => b.addEventListener("click", async () => {
+      try { await api("/api/open-url", { url: b.dataset.open }); toast("Opened the printer's settings in your browser"); }
+      catch (e) { toast(e.message, "bad"); }
+    }));
+    $("#useWifi", body)?.addEventListener("click", () => { setPrinter(printerByName(wifiQueue.name)); toast("Now printing over Wi-Fi"); draw(c); });
+    $("#useUsb", body)?.addEventListener("click", () => {
+      setPrinter(printerByName(c.queues.find((q) => q.kind === "usb").name)); toast("Now printing over USB"); draw(c);
+    });
+    $("#addWifi", body)?.addEventListener("click", async (e) => {
+      e.currentTarget.disabled = true;
+      const model = c.model || p.info || p.name;
+      const ok = await setupPrinter(`${model} WiFi`, net.uri, { info: `${model} (Wi-Fi)`, keepOpen: true });
+      if (!ok) { e.currentTarget.disabled = false; return; }
+      const fresh = await api("/api/connection?printer=" + encodeURIComponent(p.name)).catch(() => c);
+      const q = fresh.queues.find((x) => x.kind === "network");
+      if (q && printerByName(q.name)) setPrinter(printerByName(q.name));
+      draw(fresh);
+    });
+    if (wasOnline === false && net) $(".conn-card:nth-child(2)", body)?.classList.add("found-flash");
+    if (wasOnline === false && net) toast("The printer is on Wi-Fi now");
+    wasOnline = !!net;
+
+    // Not on Wi-Fi yet: keep checking so the dialog updates the moment it joins.
+    stop();
+    if (!net) watching = setInterval(async () => {
+      if (!m.isConnected) return stop();
+      try { draw(await api("/api/connection?printer=" + encodeURIComponent(p.name))); } catch { /* keep waiting */ }
+    }, 4000);
+  };
+
+  try {
+    const c = await api("/api/connection?printer=" + encodeURIComponent(p.name));
+    if (state.printer?.name === p.name) { state.conn = c; renderConnRow(); }
+    draw(c);
+  } catch (e) {
+    const body = $("#wifiBody", m);
+    if (body) body.innerHTML = `<h2>Printer &amp; Wi-Fi</h2><p>${esc(e.message)}</p><div class="actions"><button class="btn" onclick="closeOverlay()">Close</button></div>`;
+  }
 }
 
 // ------------------------------------------------------------ capabilities -> controls
@@ -669,6 +833,7 @@ async function openQueue() {
   armed($("#clearData"), `${icon("i-trash", 14)}Sure?`, async () => {
     try {
       const r = await api("/api/clear-data", { keep: state.doc?.id });
+      window.onAppDataCleared?.();
       try { Object.keys(localStorage).filter((k) => k.startsWith("lps.")).forEach((k) => localStorage.removeItem(k)); } catch { /* ignore */ }
       state.s = { ...structuredClone(DEFAULTS), media: state.s.media };
       state.zoom = 1;
@@ -691,6 +856,7 @@ function wireGlobal() {
   $("#queueBtn").onclick = openQueue;
   $("#printBtn").onclick = doPrint;
   $("#printerCard").onclick = (e) => { e.stopPropagation(); toggleMenu(); };
+  $("#connRow").onclick = wifiDialog;
   document.addEventListener("click", (e) => { if (!$("#pickerWrap").contains(e.target)) toggleMenu(false); });
   $("#prevSheet").onclick = () => goSheet(-1);
   $("#nextSheet").onclick = () => goSheet(1);
@@ -705,14 +871,16 @@ function wireGlobal() {
   document.addEventListener("drop", (e) => {
     e.preventDefault(); depth = 0; document.body.classList.remove("dragging");
     const f = e.dataTransfer?.files?.[0];
-    if (f) openFile(f);
+    if (f) { window.setMode?.("print"); openFile(f); }
   });
 
   document.addEventListener("keydown", (e) => {
     const typing = /INPUT|SELECT|TEXTAREA/.test(document.activeElement?.tagName);
+    const scanning = document.body.classList.contains("mode-scan");
+    if (e.key === "Escape") { toggleMenu(false); if (!$("#overlay .modal #mGo")) closeOverlay(); return; }
+    if (scanning) return;  // scan.js handles its own keys
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "p") { e.preventDefault(); doPrint(); }
     else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "o") { e.preventDefault(); pick(); }
-    else if (e.key === "Escape") { toggleMenu(false); if (!$("#overlay .modal #mGo")) closeOverlay(); }
     else if (!typing && (e.key === "PageDown" || e.key === "j")) { e.preventDefault(); goSheet(1); }
     else if (!typing && (e.key === "PageUp" || e.key === "k")) { e.preventDefault(); goSheet(-1); }
     else if (!typing && (e.key === "+" || e.key === "=")) zoom(1.15);
@@ -730,6 +898,8 @@ async function boot() {
     const { docs } = await api("/api/initial");
     if (docs.length) setDoc(docs[0]);
   } catch { /* nothing passed on the command line */ }
+  // Come back to Scan if that's where the user left off, unless a file was opened with the app.
+  if (!state.doc && store.get("mode", "print") === "scan") window.setMode?.("scan");
   pollJobs();
   setInterval(pollJobs, 4000);
   setInterval(async () => {
@@ -738,7 +908,7 @@ async function boot() {
       const data = await api("/api/printers?refresh=1");
       state.printers = data.printers; state.ippUsb = data.ipp_usb;
       const p = printerByName(before);
-      if (p) { state.printer = p; renderPrinter(); }
+      if (p) { state.printer = p; renderPrinter(); loadConnection(); }
     } catch { /* keep the last known state */ }
   }, 20000);
 }

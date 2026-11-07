@@ -103,13 +103,13 @@ if [[ $APP_ONLY == 0 ]]; then
   elif command -v apt-get >/dev/null; then
     sudo apt-get update -qq
     pk=pkexec; apt-cache show pkexec >/dev/null 2>&1 || pk=policykit-1
-    sudo apt-get install -y cups cups-filters ipp-usb avahi-daemon libnss-mdns "$pk" ghostscript
+    sudo apt-get install -y cups cups-filters ipp-usb avahi-daemon avahi-utils libnss-mdns "$pk" ghostscript
     [[ $office == 1 ]] && sudo apt-get install -y libreoffice-writer libreoffice-calc libreoffice-impress
   elif command -v dnf >/dev/null; then
     sudo dnf install -y cups cups-filters ipp-usb avahi nss-mdns polkit ghostscript
     [[ $office == 1 ]] && sudo dnf install -y libreoffice-writer libreoffice-calc libreoffice-impress
   elif command -v zypper >/dev/null; then
-    sudo zypper --non-interactive install cups cups-filters ipp-usb avahi nss-mdns polkit ghostscript
+    sudo zypper --non-interactive install cups cups-filters ipp-usb avahi avahi-utils nss-mdns polkit ghostscript
     [[ $office == 1 ]] && sudo zypper --non-interactive install libreoffice-writer libreoffice-calc libreoffice-impress
   else
     note "Unknown package manager. Please install: cups, cups-filters, ipp-usb, avahi, nss-mdns, polkit."
